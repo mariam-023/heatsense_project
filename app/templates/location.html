@@ -17,17 +17,22 @@
             --orange-deep: #ea580c;
             --dark: #0a0a0a;
             --panel: rgba(14,14,14,0.97);
-            --border: rgba(255,255,255,0.08);
-            --text-muted: rgba(255,255,255,0.45);
+            --border: rgba(255,255,255,0.12);
+            --text-main: #f8fafc;
+            --text-secondary: #e2e8f0;
+            --text-muted: #cbd5e1;
         }
         body {
             font-family: 'Inter', sans-serif;
             background: var(--dark);
-            color: white;
+            color: var(--text-main);
             height: 100vh;
             overflow: hidden;
             display: flex;
             flex-direction: column;
+        }
+        .text-muted, small.text-muted, span.text-muted, div.text-muted {
+            color: #cbd5e1 !important;
         }
 
         /* Top header bar */
@@ -310,6 +315,7 @@
         #location-map {
             flex: 1;
             z-index: 1;
+            cursor: crosshair;
         }
 
         /* Map tooltip */
@@ -392,16 +398,30 @@
                     <i class="fa-solid fa-location-crosshairs gps-icon"></i>
                     <i class="fa-solid fa-spinner gps-loading"></i>
                     <div>
-                        <div style="font-size:0.88rem;">Use My Current Location</div>
-                        <div style="font-size:0.72rem;opacity:0.6;font-weight:400;">Auto-detect via GPS</div>
+                        <div style="font-size:0.88rem;font-weight:600;">Fetch Exact Location</div>
+                        <div style="font-size:0.72rem;opacity:0.75;font-weight:400;" id="gps-subtext">Automatic GPS / Wi-Fi Pinpoint</div>
                     </div>
                 </button>
+
+                <!-- Location Access Notification / Guidance (shown when permission is denied or device has no GPS) -->
+                <div id="permission-alert" style="display:none;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.35);border-radius:10px;padding:0.75rem 0.9rem;margin-bottom:0.85rem;font-size:0.76rem;color:#fca5a5;line-height:1.45;">
+                    <div style="font-weight:700;display:flex;align-items:center;gap:0.4rem;color:#ef4444;margin-bottom:0.3rem;">
+                        <i class="fa-solid fa-shield-halved"></i> Browser Location Blocked
+                    </div>
+                    <div>To detect your exact house/building, click the <b>lock 🔒 or site settings icon</b> in your browser URL bar, change <b>Location</b> to <b>Allow</b>, then click <b>Fetch Exact Location</b> again.</div>
+                    <div style="margin-top:0.4rem;color:#fdba74;">💡 Or search your street/landmark below or click anywhere on the map!</div>
+                </div>
+
+                <!-- Guidance notice on how to refine pinpoint -->
+                <div id="pinpoint-hint" style="display:none;background:rgba(249,115,22,0.1);border:1px solid rgba(249,115,22,0.3);border-radius:10px;padding:0.6rem 0.85rem;margin-bottom:0.85rem;font-size:0.75rem;color:#fdba74;line-height:1.4;">
+                    <i class="fa-solid fa-hand-pointer"></i> <b>Tip:</b> You can drag the orange pin on the map or click any point to set your exact rooftop/house!
+                </div>
 
                 <!-- Search -->
                 <div class="search-wrapper" id="search-wrapper">
                     <i class="fa-solid fa-magnifying-glass search-icon"></i>
                     <input type="text" class="search-input" id="search-input"
-                           placeholder="Search city, town, village in Karnataka..."
+                           placeholder="Search street, college, landmark, city, town..."
                            autocomplete="off"
                            oninput="onSearchInput(this.value)"
                            onkeydown="onSearchKeydown(event)">
@@ -434,8 +454,9 @@
                 <div class="location-card" id="location-card">
                     <div class="location-card-header">
                         <div class="loc-name" id="loc-name">—</div>
-                        <span class="loc-badge" id="loc-badge">District</span>
+                        <span class="loc-badge" id="loc-badge">Location</span>
                     </div>
+                    <div id="loc-address" style="font-size:0.75rem;color:var(--text-muted);margin:0.25rem 0 0.75rem;line-height:1.4;word-break:break-word;">—</div>
                     <div class="loc-detail-row">
                         <div class="loc-detail">
                             <div class="label">District</div>
@@ -455,7 +476,7 @@
                         </div>
                     </div>
                     <div class="loc-detail" style="margin-top:0.4rem;">
-                        <div class="label">Place Type</div>
+                        <div class="label">Place Type & Accuracy</div>
                         <div class="value" id="loc-type">—</div>
                     </div>
                 </div>
@@ -497,7 +518,7 @@
     <script>
         // ── State ─────────────────────────────────────────────────────────────
         let selectedLat = null, selectedLon = null, selectedName = null;
-        let currentMarker = null, aoiCircle = null;
+        let currentMarker = null, aoiCircle = null, accuracyCircle = null;
         let searchTimeout = null;
         let aoiRadius = 15000; // metres
 
@@ -512,7 +533,7 @@
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
             attribution: '© OpenStreetMap contributors, © CARTO',
             subdomains: 'abcd',
-            maxZoom: 18
+            maxZoom: 19
         }).addTo(map);
 
         // Custom orange marker
@@ -530,45 +551,150 @@
             iconAnchor: [16, 32],
         });
 
-        // Map click handler
+        // Map click handler — clicks directly drop marker at clicked point
         map.on('click', (e) => {
-            setLocation(e.latlng.lat, e.latlng.lng, null);
+            setLocation(e.latlng.lat, e.latlng.lng, null, null, true, 'Map Click');
         });
 
-        // ── GPS Location ──────────────────────────────────────────────────────
+        // ── GPS / Exact Location Detection ────────────────────────────────────
+        function showPermissionHelp() {
+            const pAlert = document.getElementById('permission-alert');
+            if (pAlert) pAlert.style.display = 'block';
+        }
+
+        function hidePermissionHelp() {
+            const pAlert = document.getElementById('permission-alert');
+            if (pAlert) pAlert.style.display = 'none';
+        }
+
         function useGPS() {
             const btn = document.getElementById('btn-gps');
             btn.classList.add('loading');
-            setStatus('Detecting GPS location...', true);
+            setStatus('Detecting exact coordinates via GPS / Wi-Fi...', true);
+            hidePermissionHelp();
+
             if (!navigator.geolocation) {
-                btn.classList.remove('loading');
-                setStatus('GPS not supported by this browser');
+                fallbackToIPLocation('GPS not supported in browser. Estimating location via network...');
                 return;
             }
+
+            let resolved = false;
+
+            // Strategy: Rapid High-Accuracy Attempt (4.5s timeout)
             navigator.geolocation.getCurrentPosition(
                 (pos) => {
-                    btn.classList.remove('loading');
-                    setLocation(pos.coords.latitude, pos.coords.longitude, null);
+                    if (resolved) return;
+                    resolved = true;
+                    handleGeolocationSuccess(pos, 'Exact Satellite / GPS');
                 },
                 (err) => {
-                    btn.classList.remove('loading');
-                    setStatus('GPS access denied. Please search manually.');
+                    console.warn('High accuracy geolocation error:', err);
+                    if (err.code === 1) { // PERMISSION_DENIED
+                        resolved = true;
+                        btn.classList.remove('loading');
+                        showPermissionHelp();
+                        fallbackToIPLocation('Location permission blocked in browser. Using network IP...');
+                        return;
+                    }
+
+                    // Attempt 2: Standard Wi-Fi / Cellular Triangulation (fast & highly reliable on PCs/laptops)
+                    setStatus('Refining exact position via Wi-Fi / network triangulation...', true);
+                    navigator.geolocation.getCurrentPosition(
+                        (pos) => {
+                            if (resolved) return;
+                            resolved = true;
+                            handleGeolocationSuccess(pos, 'Network Wi-Fi / Cellular');
+                        },
+                        (err2) => {
+                            console.warn('Standard geolocation failed:', err2);
+                            resolved = true;
+                            if (err2.code === 1) showPermissionHelp();
+                            fallbackToIPLocation('Device GPS unavailable. Estimating approximate location via IP...');
+                        },
+                        { enableHighAccuracy: false, timeout: 5000, maximumAge: 300000 }
+                    );
                 },
-                { timeout: 10000, maximumAge: 60000, enableHighAccuracy: true }
+                { enableHighAccuracy: true, timeout: 4500, maximumAge: 60000 }
             );
         }
 
+        function handleGeolocationSuccess(pos, sourceLabel) {
+            const btn = document.getElementById('btn-gps');
+            btn.classList.remove('loading');
+            hidePermissionHelp();
+            const lat = pos.coords.latitude;
+            const lon = pos.coords.longitude;
+            const acc = Math.round(pos.coords.accuracy || 0);
+
+            setStatus(`✓ ${sourceLabel} acquired (±${acc}m accuracy)`, false);
+            setLocation(lat, lon, null, acc, false, sourceLabel);
+        }
+
+        async function fallbackToIPLocation(statusMsg) {
+            const btn = document.getElementById('btn-gps');
+            setStatus(statusMsg, true);
+            try {
+                const res = await fetch('/api/detect-ip-location');
+                const data = await res.json();
+                btn.classList.remove('loading');
+                if (data.success) {
+                    setStatus(`✓ Network location: ${data.name} (Drag pin or search to refine exact spot)`, false);
+                    setLocation(data.lat, data.lon, data.name, data.accuracy || 5000, false, 'Network IP (Estimated)');
+                } else {
+                    setStatus('Could not auto-detect location. Please search or click map.', false);
+                }
+            } catch (e) {
+                btn.classList.remove('loading');
+                setStatus('Could not auto-detect location. Please search or click map.', false);
+            }
+        }
+
         // ── Set selected location ─────────────────────────────────────────────
-        async function setLocation(lat, lon, name) {
+        async function setLocation(lat, lon, name, accuracy = null, isMapClick = false, fixType = null) {
             selectedLat = lat;
             selectedLon = lon;
-            map.setView([lat, lon], Math.max(map.getZoom(), 13));
 
-            // Place marker
+            // Zoom in close to exact location (level 16 for street/building level view)
+            map.setView([lat, lon], isMapClick ? Math.max(map.getZoom(), 15) : 16);
+
+            // Place marker (DRAGGABLE for exact pinpointing)
             if (currentMarker) map.removeLayer(currentMarker);
             if (aoiCircle) map.removeLayer(aoiCircle);
+            if (accuracyCircle) map.removeLayer(accuracyCircle);
 
-            currentMarker = L.marker([lat, lon], { icon: orangeIcon }).addTo(map);
+            currentMarker = L.marker([lat, lon], {
+                icon: orangeIcon,
+                draggable: true,
+                autoPan: true
+            }).addTo(map);
+
+            currentMarker.bindTooltip("📍 Drag pin to fine-tune exact spot", {
+                permanent: false,
+                direction: 'top',
+                offset: [0, -32]
+            });
+
+            // Re-geocode whenever the pin is dragged and dropped
+            currentMarker.on('dragend', async (e) => {
+                const pos = e.target.getLatLng();
+                setStatus('Updating location to dragged pin coordinates...', true);
+                await setLocation(pos.lat, pos.lng, null, null, true, 'Pinpoint Drag');
+            });
+
+            // Show tip that pin is draggable
+            const hintBox = document.getElementById('pinpoint-hint');
+            if (hintBox) hintBox.style.display = 'block';
+
+            if (accuracy && accuracy < 5000) {
+                accuracyCircle = L.circle([lat, lon], {
+                    radius: accuracy,
+                    color: '#3b82f6',
+                    fillColor: '#3b82f6',
+                    fillOpacity: 0.12,
+                    weight: 1,
+                    dashArray: '3 3',
+                }).addTo(map);
+            }
 
             aoiCircle = L.circle([lat, lon], {
                 radius: aoiRadius,
@@ -579,55 +705,63 @@
                 dashArray: '6 4',
             }).addTo(map);
 
-            // Reverse geocode
-            setStatus('Reverse geocoding location...', true);
-            if (!name) {
-                name = await reverseGeocode(lat, lon);
-            }
+            // Reverse geocode to get exact place details
+            setStatus('Reverse geocoding exact spot...', true);
+            const geoData = await reverseGeocode(lat, lon);
+            selectedName = geoData.name || name || `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
 
-            selectedName = name;
-            currentMarker.bindPopup(`<b style="color:#f97316;">${name}</b><br><small>${lat.toFixed(5)}, ${lon.toFixed(5)}</small>`).openPopup();
+            currentMarker.bindPopup(`
+                <div style="font-family:sans-serif;min-width:180px;line-height:1.4;">
+                    <b style="color:#f97316;font-size:0.95rem;">${selectedName}</b><br>
+                    <small style="color:#bbb;">${geoData.display_name || ''}</small><br>
+                    <small style="color:#f97316;">📍 ${lat.toFixed(6)}, ${lon.toFixed(6)}</small><br>
+                    <small style="color:#10b981;font-size:0.75rem;">✓ Pin is draggable — move to fine-tune</small>
+                </div>
+            `).openPopup();
 
             document.getElementById('map-hint').style.display = 'none';
-            updateLocationCard(lat, lon, name);
+            updateLocationCard(lat, lon, selectedName, geoData, accuracy, fixType);
             enableAnalyze();
-            setStatus(`✓ Location selected: ${name}`);
+            setStatus(`✓ Exact Location: ${selectedName}`);
         }
 
         // ── Reverse geocode via Nominatim ─────────────────────────────────────
         async function reverseGeocode(lat, lon) {
             try {
-                const res = await fetch(`/api/geocode?lat=${lat}&lon=${lon}`);
+                const res = await fetch(`/api/geocode?lat=${lat}&lon=${lon}&full=1`);
                 const data = await res.json();
-                return data.display_name || `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+                return data;
             } catch {
-                return `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+                return {
+                    name: `${lat.toFixed(5)}, ${lon.toFixed(5)}`,
+                    display_name: `${lat.toFixed(6)}, ${lon.toFixed(6)}`,
+                    district: '—',
+                    state: 'Karnataka',
+                    type: 'Exact Coordinate'
+                };
             }
         }
 
         // ── Update location card UI ───────────────────────────────────────────
-        async function updateLocationCard(lat, lon, name) {
-            try {
-                const res = await fetch(`/api/geocode?lat=${lat}&lon=${lon}&full=1`);
-                const data = await res.json();
+        function updateLocationCard(lat, lon, name, data, accuracy = null, fixType = null) {
+            document.getElementById('loc-name').textContent = data.name || name;
+            document.getElementById('loc-address').textContent = data.display_name || 'Exact Coordinates Pinpointed';
+            document.getElementById('loc-district').textContent = data.district || '—';
+            document.getElementById('loc-state').textContent = data.state || 'Karnataka';
+            document.getElementById('loc-lat').textContent = lat.toFixed(6);
+            document.getElementById('loc-lon').textContent = lon.toFixed(6);
 
-                document.getElementById('loc-name').textContent = data.name || name;
-                document.getElementById('loc-district').textContent = data.district || '—';
-                document.getElementById('loc-state').textContent = data.state || 'Karnataka';
-                document.getElementById('loc-lat').textContent = lat.toFixed(5);
-                document.getElementById('loc-lon').textContent = lon.toFixed(5);
-                document.getElementById('loc-type').textContent = data.type || 'Point';
-                document.getElementById('loc-badge').textContent = data.level || 'Location';
-
-                document.getElementById('location-card').classList.add('show');
-                document.getElementById('aoi-selector').style.display = 'block';
-            } catch (e) {
-                document.getElementById('loc-name').textContent = name;
-                document.getElementById('loc-lat').textContent = lat.toFixed(5);
-                document.getElementById('loc-lon').textContent = lon.toFixed(5);
-                document.getElementById('location-card').classList.add('show');
-                document.getElementById('aoi-selector').style.display = 'block';
+            let typeDesc = data.type || 'Point';
+            if (accuracy) {
+                typeDesc += ` (±${accuracy}m)`;
+            } else if (fixType) {
+                typeDesc += ` (${fixType})`;
             }
+            document.getElementById('loc-type').textContent = typeDesc;
+            document.getElementById('loc-badge').textContent = data.level || (accuracy ? 'GPS Fix' : 'Location');
+
+            document.getElementById('location-card').classList.add('show');
+            document.getElementById('aoi-selector').style.display = 'block';
         }
 
         // ── Search ────────────────────────────────────────────────────────────
@@ -635,7 +769,7 @@
             clearTimeout(searchTimeout);
             const dropdown = document.getElementById('search-dropdown');
             if (val.length < 2) { dropdown.classList.remove('open'); return; }
-            searchTimeout = setTimeout(() => searchLocation(val), 350);
+            searchTimeout = setTimeout(() => searchLocation(val), 300);
         }
 
         async function searchLocation(q) {
@@ -648,11 +782,28 @@
             }
         }
 
+        async function searchLocationImmediate(q) {
+            setStatus(`Searching for "${q}"...`, true);
+            try {
+                const res = await fetch(`/api/search-location?q=${encodeURIComponent(q)}`);
+                const results = await res.json();
+                if (results && results.length > 0) {
+                    const top = results[0];
+                    selectSearchResult(top.lat, top.lon, top.name);
+                    setStatus(`✓ Exact location selected: ${top.name}`, false);
+                } else {
+                    setStatus(`No results found for "${q}". Click anywhere on the map to pinpoint.`, false);
+                }
+            } catch (e) {
+                console.error('Immediate search failed:', e);
+            }
+        }
+
         function renderDropdown(results) {
             const dropdown = document.getElementById('search-dropdown');
             if (!results.length) { dropdown.classList.remove('open'); return; }
             dropdown.innerHTML = results.slice(0, 8).map(r => `
-                <div class="dropdown-item" onclick="selectSearchResult(${r.lat}, ${r.lon}, '${r.display_name.replace(/'/g,"\\'")}')">
+                <div class="dropdown-item" onclick="selectSearchResult(${r.lat}, ${r.lon}, '${(r.name || r.display_name).replace(/'/g,"\\'")}')">
                     <i class="fa-solid fa-location-dot place-icon"></i>
                     <div>
                         <div class="place-name">${r.name}</div>
@@ -666,12 +817,19 @@
         function selectSearchResult(lat, lon, name) {
             document.getElementById('search-dropdown').classList.remove('open');
             document.getElementById('search-input').value = '';
-            setLocation(parseFloat(lat), parseFloat(lon), name);
+            setLocation(parseFloat(lat), parseFloat(lon), name, null, false, 'Search Match');
         }
 
         function onSearchKeydown(e) {
             if (e.key === 'Escape') {
                 document.getElementById('search-dropdown').classList.remove('open');
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                document.getElementById('search-dropdown').classList.remove('open');
+                const val = document.getElementById('search-input').value.trim();
+                if (val.length >= 2) {
+                    searchLocationImmediate(val);
+                }
             }
         }
 
@@ -737,6 +895,18 @@
             const dot = document.getElementById('status-dot');
             dot.style.background = loading ? '#f97316' : '#10b981';
         }
+
+        // ── Auto-Detect on Page Load ──────────────────────────────────────────
+        window.addEventListener('DOMContentLoaded', () => {
+            // If browser permissions already permit geolocation, auto-trigger immediately
+            if (navigator.permissions && navigator.permissions.query) {
+                navigator.permissions.query({ name: 'geolocation' }).then((res) => {
+                    if (res.state === 'granted') {
+                        useGPS();
+                    }
+                }).catch(() => {});
+            }
+        });
     </script>
 </body>
 </html>

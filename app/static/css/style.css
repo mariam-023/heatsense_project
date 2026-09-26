@@ -12,13 +12,13 @@
     --bg-sidebar:      #0e0e0e;
     --bg-card:         rgba(22, 22, 22, 0.85);
     --bg-card-hover:   rgba(30, 30, 30, 0.9);
-    --border-card:     rgba(255, 255, 255, 0.07);
-    --border-active:   rgba(249, 115, 22, 0.3);
+    --border-card:     rgba(255, 255, 255, 0.09);
+    --border-active:   rgba(249, 115, 22, 0.4);
 
     --orange:          #f97316;
     --orange-deep:     #ea580c;
     --orange-light:    #fb923c;
-    --orange-glow:     rgba(249, 115, 22, 0.15);
+    --orange-glow:     rgba(249, 115, 22, 0.2);
     --primary:         #f97316;
     --primary-gradient: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
 
@@ -28,9 +28,10 @@
     --blue:            #3b82f6;
     --purple:          #8b5cf6;
 
-    --text-main:       #f5f5f5;
-    --text-secondary:  rgba(255, 255, 255, 0.7);
-    --text-muted:      rgba(255, 255, 255, 0.4);
+    --text-main:       #f8fafc;
+    --text-secondary:  #e2e8f0;
+    --text-muted:      #cbd5e1;
+    --text-dim:        #94a3b8;
 
     --radius-sm:       8px;
     --radius-md:       12px;
@@ -43,7 +44,7 @@
     --shadow-orange:   0 4px 20px rgba(249, 115, 22, 0.25);
 }
 
-/* ── Base Reset ─────────────────────────────────────────────────────────── */
+/* ── Base Reset & Universal High-Legibility Dark Mode Text Overrides ─────── */
 * { box-sizing: border-box; }
 
 body {
@@ -56,6 +57,24 @@ body {
     overflow-x: hidden;
     margin: 0;
 }
+
+/* High visibility for all text classes across dark mode */
+.text-muted, small.text-muted, p.text-muted, span.text-muted, div.text-muted, label.text-muted {
+    color: #cbd5e1 !important;
+}
+
+.text-secondary, small.text-secondary, p.text-secondary, span.text-secondary {
+    color: #e2e8f0 !important;
+}
+
+small, .small {
+    color: #cbd5e1;
+}
+
+p {
+    color: var(--text-secondary);
+}
+
 
 /* ── Scrollbar ──────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -125,7 +144,7 @@ body {
 }
 
 .sidebar .nav-link {
-    color: var(--text-muted);
+    color: #cbd5e1;
     font-weight: 500;
     font-size: 0.85rem;
     padding: 0.65rem 0.9rem;
@@ -139,8 +158,8 @@ body {
 }
 
 .sidebar .nav-link:hover {
-    color: var(--text-secondary);
-    background: rgba(255, 255, 255, 0.03);
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.06);
 }
 
 .sidebar .nav-link.active {
@@ -177,7 +196,7 @@ body {
 }
 
 .navbar .nav-link {
-    color: var(--text-muted) !important;
+    color: #cbd5e1 !important;
     font-weight: 500;
     font-size: 0.88rem;
     transition: var(--transition);
@@ -233,7 +252,7 @@ body {
 .user-name {
     font-size: 0.82rem;
     font-weight: 500;
-    color: var(--text-secondary);
+    color: #e2e8f0;
 }
 
 /* ── Filter Bar ─────────────────────────────────────────────────────────── */
@@ -281,7 +300,7 @@ body {
     align-items: center;
     gap: 0.45rem;
     margin-bottom: 0.2rem;
-    color: var(--text-secondary);
+    color: #e2e8f0;
 }
 
 .legend-color {
@@ -322,8 +341,8 @@ body {
 
 .stat-label {
     font-size: 0.72rem;
-    color: var(--text-muted);
-    font-weight: 500;
+    color: #cbd5e1;
+    font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
     margin-bottom: 0.4rem;
@@ -333,11 +352,12 @@ body {
     font-size: 1.5rem;
     font-weight: 700;
     line-height: 1;
+    color: #f8fafc;
 }
 
 .stat-sub {
-    font-size: 0.72rem;
-    color: var(--text-muted);
+    font-size: 0.75rem;
+    color: #94a3b8;
     margin-top: 0.35rem;
 }
 
@@ -370,23 +390,24 @@ body {
     box-shadow: var(--shadow-hover);
 }
 .age-card .age-icon { font-size: 2rem; margin-bottom: 0.6rem; }
-.age-card .age-title { font-size: 0.88rem; font-weight: 700; margin-bottom: 0.6rem; }
+.age-card .age-title { font-size: 0.88rem; font-weight: 700; margin-bottom: 0.6rem; color: #f8fafc; }
 .age-card .precaution-list {
     list-style: none; padding: 0; margin: 0;
 }
 .age-card .precaution-list li {
-    font-size: 0.78rem;
-    color: var(--text-secondary);
+    font-size: 0.8rem;
+    color: #e2e8f0;
     padding: 0.3rem 0;
     padding-left: 1rem;
     position: relative;
-    line-height: 1.4;
+    line-height: 1.45;
 }
 .age-card .precaution-list li::before {
     content: '•';
     position: absolute;
     left: 0;
     font-weight: bold;
+    color: var(--orange-light);
 }
 
 .age-card.children  { background: linear-gradient(135deg, rgba(59,130,246,0.12), rgba(10,10,10,0.5)); border-color: rgba(59,130,246,0.2); }
@@ -416,18 +437,29 @@ body {
     position: absolute;
     top: 0; bottom: 0;
     left: 50%;
-    width: 3px;
-    background: var(--orange);
+    width: 40px;
+    margin-left: -20px;
     z-index: 10;
     cursor: ew-resize;
-    box-shadow: 0 0 12px rgba(249,115,22,0.6);
+    touch-action: none;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.ba-slider::before {
+    content: '';
+    position: absolute;
+    top: 0; bottom: 0;
+    left: 50%;
+    width: 3px;
+    transform: translateX(-50%);
+    background: var(--orange);
+    box-shadow: 0 0 12px rgba(249,115,22,0.7);
 }
 .ba-slider::after {
     content: '⟷';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
+    position: relative;
     width: 36px;
     height: 36px;
     background: var(--orange);
@@ -437,7 +469,9 @@ body {
     justify-content: center;
     font-size: 14px;
     color: white;
-    box-shadow: 0 2px 12px rgba(249,115,22,0.5);
+    box-shadow: 0 2px 12px rgba(249,115,22,0.6);
+    z-index: 2;
+    pointer-events: none;
 }
 .ba-label {
     position: absolute;
@@ -448,6 +482,7 @@ body {
     font-weight: 700;
     z-index: 15;
     letter-spacing: 0.5px;
+    pointer-events: none;
 }
 .ba-label.before { left: 10px; background: rgba(239,68,68,0.9); color: white; }
 .ba-label.after  { right: 10px; background: rgba(16,185,129,0.9); color: white; }
@@ -471,8 +506,8 @@ body {
     box-shadow: 0 0 0 1px var(--orange), var(--shadow-orange);
 }
 .strategy-card .strategy-icon { font-size: 2rem; margin-bottom: 0.5rem; }
-.strategy-card .strategy-name { font-size: 0.85rem; font-weight: 700; margin-bottom: 0.3rem; }
-.strategy-card .strategy-desc { font-size: 0.72rem; color: var(--text-muted); line-height: 1.4; }
+.strategy-card .strategy-name { font-size: 0.88rem; font-weight: 700; margin-bottom: 0.3rem; color: #f8fafc; }
+.strategy-card .strategy-desc { font-size: 0.75rem; color: #cbd5e1; line-height: 1.45; }
 
 /* ── Premium Buttons ────────────────────────────────────────────────────── */
 .btn-primary {
@@ -506,12 +541,12 @@ body {
 
 .btn-outline-light {
     border-color: var(--border-card) !important;
-    color: var(--text-secondary) !important;
+    color: #e2e8f0 !important;
     border-radius: var(--radius-md);
     font-size: 0.82rem;
 }
 .btn-outline-light:hover {
-    background: rgba(255, 255, 255, 0.05) !important;
+    background: rgba(255, 255, 255, 0.08) !important;
     color: white !important;
 }
 
@@ -533,7 +568,7 @@ body {
     flex-direction: column;
     gap: 1rem;
     padding: 3rem;
-    color: var(--text-muted);
+    color: #cbd5e1;
     font-size: 0.88rem;
 }
 
@@ -545,45 +580,55 @@ body {
     padding: 0.85rem 1rem;
     margin-bottom: 1rem;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 0.85rem;
+    color: #f1f5f9;
+}
+.alert-toast strong {
+    color: #ffffff;
+}
+.alert-toast .badge.bg-secondary {
+    background-color: #475569 !important;
+    color: #f1f5f9 !important;
 }
 
 /* ── Form Controls ──────────────────────────────────────────────────────── */
 .form-select, .form-control {
-    background-color: rgba(20,20,20,0.8) !important;
-    color: var(--text-main) !important;
+    background-color: rgba(20,20,20,0.85) !important;
+    color: #f8fafc !important;
     border-color: var(--border-card) !important;
     border-radius: var(--radius-sm) !important;
     font-size: 0.85rem;
     transition: var(--transition);
 }
 .form-select:focus, .form-control:focus {
-    border-color: rgba(249,115,22,0.4) !important;
-    box-shadow: 0 0 0 2px rgba(249,115,22,0.1) !important;
+    border-color: rgba(249,115,22,0.5) !important;
+    box-shadow: 0 0 0 2px rgba(249,115,22,0.15) !important;
+    color: #ffffff !important;
 }
 
 .form-label {
     font-size: 0.75rem;
     font-weight: 600;
-    color: var(--text-muted);
+    color: #cbd5e1 !important;
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
 
 /* ── Tables ──────────────────────────────────────────────────────────────── */
-.table { color: var(--text-main) !important; }
+.table { color: #f8fafc !important; }
 .table td, .table th {
     background-color: transparent !important;
     border-color: var(--border-card) !important;
     padding: 0.7rem 0.9rem !important;
     font-size: 0.85rem;
+    color: #e2e8f0 !important;
 }
 
 /* ── Tabs (Bootstrap override) ──────────────────────────────────────────── */
 .nav-tabs { border-bottom: 1px solid var(--border-card); }
 .nav-tabs .nav-link {
-    color: var(--text-muted);
+    color: #cbd5e1;
     border: none;
     border-bottom: 2px solid transparent;
     font-weight: 500;
@@ -591,7 +636,7 @@ body {
     transition: var(--transition);
     padding: 0.6rem 1rem;
 }
-.nav-tabs .nav-link:hover { color: var(--text-main); border-bottom-color: rgba(249,115,22,0.3); }
+.nav-tabs .nav-link:hover { color: #ffffff; border-bottom-color: rgba(249,115,22,0.3); }
 .nav-tabs .nav-link.active {
     color: var(--orange) !important;
     background: transparent !important;
@@ -621,6 +666,7 @@ body {
     font-size: 1.1rem;
     font-weight: 700;
     margin: 0;
+    color: #f8fafc;
 }
 .section-header .section-icon {
     font-size: 1.25rem;
@@ -655,8 +701,9 @@ body {
     border-radius: 4px;
     transition: width 0.8s ease;
 }
-.factor-value { font-size: 0.85rem; font-weight: 700; }
-.factor-label { font-size: 0.75rem; color: var(--text-muted); }
+.factor-value { font-size: 0.85rem; font-weight: 700; color: #f8fafc; }
+.factor-label { font-size: 0.75rem; color: #cbd5e1 !important; }
+
 
 /* ── Responsive ─────────────────────────────────────────────────────────── */
 @media (max-width: 991.98px) {
@@ -671,6 +718,25 @@ body {
     .sidebar .nav-link { white-space: nowrap; font-size: 0.78rem; padding: 0.5rem 0.8rem; }
     .main-content { padding: 1rem; }
     .map-frame-container { height: 350px; }
+}
+
+/* ── Plotly Dark Theme Overrides ─────────────────────────────────────── */
+.js-plotly-plot .plotly .main-svg,
+.js-plotly-plot .plotly .bg,
+.js-plotly-plot .plotly .plotbg,
+.js-plotly-plot .plotly rect.bg {
+    fill: transparent !important;
+    background: transparent !important;
+}
+
+/* Ensure all default dark-blue Plotly text is converted to readable light theme colors */
+.js-plotly-plot .plotly text[style*="rgb(42, 63, 95)"],
+.js-plotly-plot .plotly text[style*="rgb(42,63,95)"] {
+    fill: #cbd5e1 !important;
+}
+.js-plotly-plot .plotly text.gtitle[style*="rgb(42, 63, 95)"],
+.js-plotly-plot .plotly text.gtitle[style*="rgb(42,63,95)"] {
+    fill: #f8fafc !important;
 }
 
 @media (max-width: 575.98px) {

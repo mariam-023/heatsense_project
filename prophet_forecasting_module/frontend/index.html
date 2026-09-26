@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prophet Time-Series Temperature Forecasting</title>
+  <!-- Chart.js CDN for responsive time-series plotting -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header class="dashboard-header">
+      <div class="header-title">
+        <h1>📈 Prophet Time-Series Forecasting Module</h1>
+        <p>10-Year Long-Term Land Surface Temperature (LST) Trend & Seasonality Analysis</p>
+      </div>
+      <div class="header-actions">
+        <button id="btnRefresh" class="btn btn-primary">🔄 Reload Forecast</button>
+        <button id="btnRegenerate" class="btn btn-secondary">⚡ Re-run Prophet Pipeline</button>
+      </div>
+    </header>
+
+    <!-- Metrics Cards -->
+    <section class="metrics-grid">
+      <div class="card metric-card">
+        <span class="card-label">Latest Predicted LST</span>
+        <span class="card-value" id="valLatestTemp">-- °C</span>
+        <span class="card-subtext" id="lblLatestDate">Date: --</span>
+      </div>
+
+      <div class="card metric-card">
+        <span class="card-label">Confidence Interval Range</span>
+        <span class="card-value" id="valConfidenceRange">-- °C – -- °C</span>
+        <span class="card-subtext">Prophet Model Uncertainty Bounds</span>
+      </div>
+
+      <div class="card metric-card">
+        <span class="card-label">Historical Baseline Window</span>
+        <span class="card-value" id="valHistoricalWindow">--</span>
+        <span class="card-subtext">MODIS Satellite Observations</span>
+      </div>
+
+      <div class="card metric-card">
+        <span class="card-label">Forecast Horizon</span>
+        <span class="card-value" id="valForecastHorizon">3,650 Days (10 Years)</span>
+        <span class="card-subtext" id="lblForecastHorizonSub">Daily Projections</span>
+      </div>
+    </section>
+
+    <!-- Main Chart Section -->
+    <section class="card chart-card">
+      <div class="chart-header">
+        <div>
+          <h2>Temperature Projections (Historical vs Forecast)</h2>
+          <p>Combines observed satellite LST (2010–present) with linear trend + yearly seasonal Prophet predictions.</p>
+        </div>
+        <div class="status-indicator">
+          <span class="status-dot" id="statusDot"></span>
+          <span id="statusText">Connecting to API...</span>
+        </div>
+      </div>
+      
+      <div class="chart-wrapper">
+        <canvas id="forecastChart"></canvas>
+      </div>
+    </section>
+
+    <!-- Documentation & Details Card -->
+    <section class="card info-card">
+      <h3>ℹ️ About the Prophet Forecasting Engine</h3>
+      <ul>
+        <li><strong>Model Architecture:</strong> Meta Prophet model configured with yearly seasonality and linear trend extrapolation.</li>
+        <li><strong>Orbital Drift Correction:</strong> Includes a $+0.21^\circ\text{C}/\text{year}$ correction factor since 2010 to account for MODIS Terra satellite overpass drift.</li>
+        <li><strong>Physical Bounds:</strong> Predictions are clipped to $[15.0^\circ\text{C}, 50.0^\circ\text{C}]$ to prevent unrealistic long-term temperature runaway.</li>
+        <li><strong>API Integration:</strong> Fetches forecast data from <code>/api/forecast</code> and can be embedded in any target web application.</li>
+      </ul>
+    </section>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

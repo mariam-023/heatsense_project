@@ -4,6 +4,12 @@ from flask import Flask
 from datetime import timedelta
 from app.database import init_db
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 def create_app(test_config=None):
     """
     Application Factory Pattern for Flask.

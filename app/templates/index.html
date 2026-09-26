@@ -10,10 +10,13 @@
         <aside class="sidebar">
             <div class="d-flex align-items-center gap-2 mb-3 px-2">
                 <img src="{{ url_for('static', filename='images/logo.jpeg') }}" alt="HeatSense Logo" style="width:34px;height:34px;border-radius:8px;background:white;padding:2px;border:1px solid rgba(249,115,22,0.4);flex-shrink:0;">
-                <div style="overflow:hidden;">
+                <div style="overflow:hidden;flex-grow:1;">
                     <div class="fw-bold text-gradient text-truncate" style="font-size:0.88rem;" id="sidebar-location-name">{{ location_name }}</div>
-                    <div style="font-size:0.68rem;color:var(--text-muted);" id="sidebar-location-coords">{{ "%.4f"|format(location_lat) }}, {{ "%.4f"|format(location_lon) }}</div>
+                    <div style="font-size:0.68rem;color:var(--text-muted);" id="sidebar-location-coords">{{ "%.5f"|format(location_lat) }}, {{ "%.5f"|format(location_lon) }}</div>
                 </div>
+                <a href="/location" class="btn btn-sm btn-outline-warning p-1" title="Change or detect exact location" style="font-size:0.75rem;border-radius:6px;flex-shrink:0;">
+                    <i class="fa-solid fa-location-crosshairs"></i>
+                </a>
             </div>
             <nav class="nav flex-column" id="dashboard-nav">
                 <a class="nav-link active" href="#" data-page="home">
@@ -69,9 +72,19 @@
     <div class="row g-3 mb-4">
         <div class="col-6 col-md-3">
             <div class="stat-card">
-                <div class="stat-label">Location</div>
+                <div class="stat-label d-flex justify-content-between align-items-center">
+                    <span>📍 Location</span>
+                    <a href="/location" class="badge bg-warning bg-opacity-10 text-warning text-decoration-none border border-warning border-opacity-25" style="font-size:0.72rem;font-weight:600;"><i class="fa-solid fa-location-crosshairs me-1"></i> Exact GPS / Change</a>
+                </div>
                 <div class="stat-value text-gradient" id="home-stat-name" style="font-size:1.1rem;">{{ location_name }}</div>
-                <div class="stat-sub">{{ "%.4f"|format(location_lat) }}°N, {{ "%.4f"|format(location_lon) }}°E</div>
+                <div class="stat-sub">{{ "%.5f"|format(location_lat) }}°N, {{ "%.5f"|format(location_lon) }}°E</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card" style="border-left:3px solid #ef4444; background:linear-gradient(135deg, rgba(239,68,68,0.06), transparent);">
+                <div class="stat-label">🌡️ Overall Temperature</div>
+                <div class="stat-value" style="color:#ef4444; font-size:1.6rem; font-weight:800;" id="home-overall-temp">—</div>
+                <div class="stat-sub" style="color:#94a3b8;">Feels like <span id="home-feels-like" style="color:#fb923c; font-weight:600;">—</span> · Real-Time Meteorological</div>
             </div>
         </div>
         <div class="col-6 col-md-3">
@@ -83,13 +96,6 @@
         </div>
         <div class="col-6 col-md-3">
             <div class="stat-card">
-                <div class="stat-label">Surface Temperature</div>
-                <div class="stat-value" style="color:var(--red);" id="home-stat-lst">—</div>
-                <div class="stat-sub">Land Surface Temp (LST)</div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="stat-card">
                 <div class="stat-label">Risk Level</div>
                 <div class="stat-value" id="home-stat-risk">—</div>
                 <div class="stat-sub" id="home-stat-advisory">Loading...</div>
@@ -97,12 +103,44 @@
         </div>
     </div>
 
-    <!-- Environmental factor cards -->
-    <div class="row g-3 mb-4">
-        <div class="col-6 col-lg-3"><div class="stat-card"><div class="stat-label">🌬️ Air Temperature</div><div class="stat-value" id="home-air-temp">—</div></div></div>
-        <div class="col-6 col-lg-3"><div class="stat-card"><div class="stat-label">💧 Humidity</div><div class="stat-value" id="home-humidity">—</div></div></div>
-        <div class="col-6 col-lg-3"><div class="stat-card"><div class="stat-label">🌿 NDVI (Vegetation)</div><div class="stat-value" style="color:var(--green);" id="home-ndvi">—</div></div></div>
-        <div class="col-6 col-lg-3"><div class="stat-card"><div class="stat-label">🏙️ NDBI (Built-up)</div><div class="stat-value" id="home-ndbi">—</div></div></div>
+    <!-- Temperature breakdown row -->
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-lg-2">
+            <div class="stat-card">
+                <div class="stat-label">🛰️ Surface Temp (LST)</div>
+                <div class="stat-value" style="color:var(--red);" id="home-stat-lst">—</div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-2">
+            <div class="stat-card">
+                <div class="stat-label">🌬️ Air Temperature</div>
+                <div class="stat-value" id="home-air-temp">—</div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-2">
+            <div class="stat-card">
+                <div class="stat-label">💧 Humidity</div>
+                <div class="stat-value" id="home-humidity">—</div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-2">
+            <div class="stat-card">
+                <div class="stat-label">🌿 NDVI (Vegetation)</div>
+                <div class="stat-value" style="color:var(--green);" id="home-ndvi">—</div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-2">
+            <div class="stat-card">
+                <div class="stat-label">🏙️ NDBI (Built-up)</div>
+                <div class="stat-value" id="home-ndbi">—</div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-2">
+            <div class="stat-card">
+                <div class="stat-label">💨 Wind Speed</div>
+                <div class="stat-value" id="home-wind">—</div>
+            </div>
+        </div>
     </div>
 
     <!-- Map + Quick Info -->
@@ -115,7 +153,7 @@
                 </div>
                 <div class="card-body p-0">
                     <div class="map-frame-container" style="height:400px;">
-                        <iframe id="home-map-iframe" src="/api/map-layers?lat={{ location_lat }}&lon={{ location_lon }}&radius={{ location_radius }}"></iframe>
+                        <iframe id="home-map-iframe" src="/api/map-layers?lat={{ location_lat }}&lon={{ location_lon }}&radius={{ location_radius }}&mode=home"></iframe>
                     </div>
                 </div>
             </div>
@@ -129,7 +167,7 @@
                             <span class="factor-icon">💨</span>
                             <div class="flex-grow-1">
                                 <div class="factor-label">Wind Speed</div>
-                                <div class="factor-value" id="home-wind">— m/s</div>
+                                <div class="factor-value" id="home-wind2">— m/s</div>
                             </div>
                         </div>
                         <div class="factor-card mb-2">
@@ -171,14 +209,14 @@
         </div>
         <div class="card-body p-0">
             <div class="map-frame-container" style="height:550px;">
-                <iframe id="main-map-iframe" src="/api/map-layers?lat={{ location_lat }}&lon={{ location_lon }}&radius={{ location_radius }}"></iframe>
+                <iframe id="main-map-iframe" src="/api/map-layers?lat={{ location_lat }}&lon={{ location_lon }}&radius={{ location_radius }}&mode=full"></iframe>
             </div>
         </div>
     </div>
     <div class="row g-3 mt-3">
-        <div class="col-md-4"><div class="card p-3 border-0"><h6 class="text-gradient fw-bold">Layers Available</h6><small class="text-muted">LST, NDVI, NDBI, LULC, Air Temp, Humidity, Wind Speed, CHI, Hotspots (toggle in GEE map layer control)</small></div></div>
-        <div class="col-md-4"><div class="card p-3 border-0"><h6 class="text-gradient fw-bold">CHI Classification</h6><small class="text-muted">Low (< 0.35) • Moderate (0.35–0.55) • High (0.55–0.75) • Very High (≥ 0.75)</small></div></div>
-        <div class="col-md-4"><div class="card p-3 border-0"><h6 class="text-gradient fw-bold">Data Sources</h6><small class="text-muted">Landsat 8 C2 L2 + ERA5-Land Daily + ESA WorldCover v200</small></div></div>
+        <div class="col-md-4"><div class="card p-3 border-0"><h6 class="text-gradient fw-bold">Layers Available</h6><small class="text-muted">LST, NDVI, NDBI, LULC, Air Temp, Humidity, Wind Speed, CHI, Hotspots (toggle in map layer control)</small></div></div>
+        <div class="col-md-4"><div class="card p-3 border-0"><h6 class="text-gradient fw-bold">CHI Classification</h6><small class="text-muted">Low (&lt; 0.35) • Moderate (0.35–0.55) • High (0.55–0.75) • Very High (≥ 0.75)</small></div></div>
+        <div class="col-md-4"><div class="card p-3 border-0"><h6 class="text-gradient fw-bold">Data Sources</h6><small class="text-muted">Landsat 8/9 C2 L2 + ERA5-Land Daily + ESA WorldCover v200</small></div></div>
     </div>
 </div>
 
@@ -213,41 +251,102 @@
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
-<!-- PAGE 4: HEAT PREDICTION                                                 -->
+<!-- PAGE 4: HEAT PREDICTION (PROPHET FORECASTING MODULE)                    -->
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
 <div id="page-prediction" class="dashboard-page">
-    <div class="section-header"><span class="section-icon">🤖</span><h4>ML-Based Heat Prediction</h4></div>
-    <div class="row g-4">
-        <div class="col-lg-7">
-            <div class="card border-0 h-100">
-                <div class="card-header py-2"><h6 class="mb-0">Prediction Timeline</h6></div>
-                <div class="card-body">
-                    <div id="prediction-chart" style="height:400px;width:100%;">
-                        <div class="loading-overlay"><div class="hs-spinner"></div><span>Generating predictions...</span></div>
-                    </div>
-                </div>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div class="section-header mb-0"><span class="section-icon">📈</span><h4 class="mb-0">Prophet Time-Series Heat Forecast</h4></div>
+        <div class="d-flex gap-2">
+            <button id="btnRefresh" class="btn btn-sm btn-outline-warning">
+                <i class="fa-solid fa-rotate me-1"></i> Reload Forecast
+            </button>
+            <button id="btnRegenerate" class="btn btn-sm btn-warning">
+                <i class="fa-solid fa-bolt me-1"></i> Re-run Prophet Model
+            </button>
+        </div>
+    </div>
+
+    <!-- Metrics Ribbon -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="stat-card">
+                <div class="stat-label">🛰️ Latest Forecast LST</div>
+                <div class="stat-value text-danger" id="valLatestTemp" style="font-size:1.4rem;font-weight:800;">— °C</div>
+                <div class="stat-sub" id="lblLatestDate">Date: —</div>
             </div>
         </div>
-        <div class="col-lg-5">
-            <div class="card border-0 mb-3">
-                <div class="card-header py-2"><h6 class="mb-0">Current Prediction</h6></div>
-                <div class="card-body">
-                    <div class="row g-2 text-center">
-                        <div class="col-4"><div class="stat-label">LST</div><div class="stat-value" style="color:var(--red);font-size:1.2rem;" id="pred-lst">—</div></div>
-                        <div class="col-4"><div class="stat-label">CHI</div><div class="stat-value" style="color:var(--orange);font-size:1.2rem;" id="pred-chi">—</div></div>
-                        <div class="col-4"><div class="stat-label">Risk</div><div class="stat-value" style="font-size:1.2rem;" id="pred-risk">—</div></div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card">
+                <div class="stat-label">🎯 Confidence Interval</div>
+                <div class="stat-value text-gradient" id="valConfidenceRange" style="font-size:1.1rem;font-weight:700;">— °C – — °C</div>
+                <div class="stat-sub">Prophet 95% Bounds</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card">
+                <div class="stat-label">📜 Historical Baseline</div>
+                <div class="stat-value text-info" id="valHistoricalWindow" style="font-size:1.4rem;font-weight:700;">2010 – 2026</div>
+                <div class="stat-sub">MODIS Satellite Data</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card">
+                <div class="stat-label">🔮 Forecast Horizon</div>
+                <div class="stat-value text-warning" id="valForecastHorizon" style="font-size:1.4rem;font-weight:700;">10 Years</div>
+                <div class="stat-sub" id="lblForecastHorizonSub">3,650 Daily Steps</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Chart Card -->
+    <div class="card border-0 mb-4">
+        <div class="card-header py-2 d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <div class="d-flex align-items-center flex-wrap gap-2">
+                <h6 class="mb-0"><i class="fa-solid fa-chart-line me-2" style="color:var(--orange);"></i>Land Surface Temp (LST) Projections</h6>
+                <span id="prophet-location-badge" class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25" style="font-size:0.78rem; font-weight:600;"><i class="fa-solid fa-location-dot me-1"></i> 📍 Active Location: {{ location_name }}</span>
+                <span id="prophet-scope-badge" class="badge bg-secondary-subtle text-light border border-secondary" style="font-size:0.75rem;">District GAUL Polygon</span>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <button id="btn-prophet-toggle-baseline" class="btn btn-sm btn-outline-warning" style="font-size:0.78rem; font-weight:600;" onclick="toggleProphetBaseline()">
+                    <i class="fa-solid fa-earth-asia me-1"></i> <span id="lbl-prophet-baseline-toggle">Statewide Regional Baseline</span>
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" id="btnRefresh" title="Refresh Forecast"><i class="fa-solid fa-rotate me-1"></i> Refresh</button>
+                <span class="gee-badge online" id="statusDotBadge"><span class="dot" id="statusDot"></span> <span id="statusText">Connecting...</span></span>
+            </div>
+        </div>
+        <div class="card-body" style="position:relative; min-height:420px;">
+            <div id="prophet-notice-banner" class="alert alert-warning py-2 px-3 mb-3 d-none" style="font-size:0.85rem; border-left:4px solid #f59e0b; background-color:rgba(245,158,11,0.1); color:#fbbf24;">
+                <i class="fa-solid fa-circle-info me-2"></i><span id="prophet-notice-text"></span>
+            </div>
+            <div id="prophet-loading-overlay" class="loading-overlay">
+                <div class="hs-spinner"></div>
+                <span id="prophet-loading-text">Fetching Meta Prophet time-series forecast...</span>
+            </div>
+            <div id="prophet-error-state" class="d-none text-center py-5">
+                <div class="text-danger fs-3 mb-2">⚠️ <span id="prophet-error-msg">Failed to load forecast data</span></div>
+                <button class="btn btn-sm btn-outline-danger mt-2" onclick="fetchAndRenderForecast(true)">Try Again</button>
+            </div>
+            <div class="chart-wrapper" style="height:400px; width:100%;">
+                <canvas id="forecastChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Documentation & Details Card -->
+    <div class="card border-0">
+        <div class="card-header py-2"><h6 class="mb-0">ℹ️ Meta Prophet Model Engine Specifications</h6></div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <div class="p-3 rounded" style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06);">
+                        <div class="fw-bold text-warning mb-1"><i class="fa-solid fa-brain me-1"></i> Prophet Architecture</div>
+                        <small class="text-muted d-block">Meta Prophet model configured with annual seasonality (`yearly_seasonality=True`) and linear trend fitting without changepoints to prevent over-extrapolating short-term noise.</small>
                     </div>
                 </div>
-            </div>
-            <div class="card border-0">
-                <div class="card-header py-2" style="border-left:3px solid var(--red);"><h6 class="mb-0">🔮 Future Scenario (+1.5°C)</h6></div>
-                <div class="card-body">
-                    <div class="row g-2 text-center">
-                        <div class="col-6"><div class="stat-label">Projected CHI</div><div class="stat-value" style="color:var(--red);font-size:1.3rem;" id="pred-future-chi">—</div></div>
-                        <div class="col-6"><div class="stat-label">Projected Risk</div><div class="stat-value" style="font-size:1.3rem;" id="pred-future-risk">—</div></div>
-                    </div>
-                    <div class="mt-3 p-2 rounded" style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);">
-                        <small class="text-muted" id="pred-advisory">Loading advisory...</small>
+                <div class="col-md-6">
+                    <div class="p-3 rounded" style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06);">
+                        <div class="fw-bold text-info mb-1"><i class="fa-solid fa-satellite me-1"></i> Orbital Drift Correction</div>
+                        <small class="text-muted d-block">Applies a +0.21°C/year correction factor starting from 2010 to correct for MODIS Terra satellite morning overpass drift.</small>
                     </div>
                 </div>
             </div>
@@ -264,9 +363,9 @@
         <div class="col-lg-7">
             <div class="card border-0">
                 <div class="card-header py-2"><h6 class="mb-0">Radar / Spider Chart — Heat Contribution Factors</h6></div>
-                <div class="card-body" style="background:rgba(255,255,255,0.97);border-radius:0 0 var(--radius-lg) var(--radius-lg);">
+                <div class="card-body">
                     <div id="radar-chart" style="height:480px;width:100%;">
-                        <div class="loading-overlay"><div class="hs-spinner"></div><span style="color:#333;">Loading factor analysis...</span></div>
+                        <div class="loading-overlay"><div class="hs-spinner"></div><span class="text-muted">Loading factor analysis...</span></div>
                     </div>
                 </div>
             </div>
@@ -357,12 +456,90 @@
         </div>
     </div>
 
-    <!-- Delta stats below -->
-    <div class="row g-3 mt-3" id="ba-stats" style="display:none;">
-        <div class="col-md-3"><div class="stat-card"><div class="stat-label">CHI Reduction</div><div class="stat-value text-gradient" id="ba-chi-delta">—</div></div></div>
-        <div class="col-md-3"><div class="stat-card"><div class="stat-label">LST Cooling</div><div class="stat-value" style="color:var(--blue);" id="ba-lst-delta">—</div></div></div>
-        <div class="col-md-3"><div class="stat-card"><div class="stat-label">Risk Before</div><div class="stat-value" id="ba-risk-before">—</div></div></div>
-        <div class="col-md-3"><div class="stat-card"><div class="stat-label">Risk After</div><div class="stat-value" style="color:var(--green);" id="ba-risk-after">—</div></div></div>
+    <!-- Before & After Comparison Cards and Table -->
+    <div id="ba-stats" style="display:none;" class="mt-4">
+        <!-- 4 Primary Comparison Cards -->
+        <div class="row g-3 mb-4">
+            <!-- CHI Card -->
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <div class="stat-label">Composite Heat Index (CHI)</div>
+                    <div class="d-flex align-items-baseline gap-2 mt-1">
+                        <span class="fs-4 fw-bold" style="color:#ef4444;" id="ba-chi-before">—</span>
+                        <span class="text-muted fs-6">➔</span>
+                        <span class="fs-4 fw-bold" style="color:#10b981;" id="ba-chi-after">—</span>
+                    </div>
+                    <div class="small mt-1" style="color:#cbd5e1;">
+                        Reduction: <span class="fw-bold text-gradient" id="ba-chi-delta">—</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- LST Card -->
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <div class="stat-label">Surface Temperature (LST)</div>
+                    <div class="d-flex align-items-baseline gap-2 mt-1">
+                        <span class="fs-4 fw-bold" style="color:#ef4444;" id="ba-lst-before">—</span>
+                        <span class="text-muted fs-6">➔</span>
+                        <span class="fs-4 fw-bold" style="color:#06b6d4;" id="ba-lst-after">—</span>
+                    </div>
+                    <div class="small mt-1" style="color:#cbd5e1;">
+                        Cooling: <span class="fw-bold" style="color:var(--blue);" id="ba-lst-delta">—</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Risk Level Card -->
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <div class="stat-label">Heat Risk Classification</div>
+                    <div class="d-flex align-items-center gap-2 mt-2">
+                        <span class="badge" style="font-size:0.85rem;padding:6px 10px;" id="ba-risk-before">—</span>
+                        <span class="text-muted">➔</span>
+                        <span class="badge" style="font-size:0.85rem;padding:6px 10px;" id="ba-risk-after">—</span>
+                    </div>
+                    <div class="small mt-1 text-muted" id="ba-risk-status">Tier Assessment</div>
+                </div>
+            </div>
+
+            <!-- Strategy Card -->
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <div class="stat-label">Applied Strategy</div>
+                    <div class="fw-bold text-gradient mt-1 text-truncate" id="ba-strat-name" style="font-size:1.05rem;">—</div>
+                    <div class="small text-muted text-truncate mt-1" id="ba-strat-desc">—</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Detailed Side-by-Side Environmental Factors Comparison Table -->
+        <div class="card border-0" style="background:var(--bg-card);border:1px solid var(--border-card) !important;border-radius:var(--radius-lg);">
+            <div class="card-body p-3">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <span class="fw-bold" style="font-size:0.9rem;color:#f8fafc;">
+                        <i class="fa-solid fa-table-columns text-gradient me-2"></i>Environmental Factors: Baseline vs Post-Mitigation
+                    </span>
+                    <span class="badge bg-dark-subtle text-muted" style="border:1px solid rgba(255,255,255,0.1);font-size:0.72rem;">Microclimate Impact Breakdown</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-dark table-hover mb-0 align-middle" style="font-size:0.84rem;background:transparent;">
+                        <thead>
+                            <tr style="border-bottom:1px solid rgba(255,255,255,0.12);color:#94a3b8;">
+                                <th style="background:transparent;">Environmental Factor</th>
+                                <th style="background:transparent;text-align:center;">🔴 Baseline (Before)</th>
+                                <th style="background:transparent;text-align:center;">🟢 Mitigated (After)</th>
+                                <th style="background:transparent;text-align:center;">Net Change (Delta)</th>
+                                <th style="background:transparent;">Physical Mitigation Benefit</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ba-factors-tbody">
+                            <!-- Populated dynamically via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 

@@ -204,9 +204,10 @@ def run_mitigation_simulation(district_features: dict, strategy_key: str) -> dic
         'after_risk': after_risk,
         'after_lst':  round(after_lst, 2),
         # Differences
-        'chi_reduction':    chi_reduction,
-        'lst_reduction':    lst_reduction,
-        'pct_improvement':  pct_improvement,
+        'chi_reduction':         chi_reduction,
+        'lst_reduction':         lst_reduction,
+        'lst_reduction_celsius': lst_reduction,
+        'pct_improvement':       pct_improvement,
         # Legacy field kept for any existing JS references
         'simulated_lst_reduction': lst_reduction,
         # Detail

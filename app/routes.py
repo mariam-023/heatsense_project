@@ -296,8 +296,8 @@ def api_auth_login():
 @main_bp.route('/api/geocode')
 def api_geocode():
     """
-    Reverse geocodes a lat/lon to a place name using Nominatim (OpenStreetMap).
-    Returns specific area names (Urwa, Surathkal, etc.) not just city names.
+    Reverse geocodes a lat/lon to an exact place name using Nominatim (OpenStreetMap).
+    Uses building/street level zoom (18) to return specific landmarks, streets, and localities.
     """
     lat  = request.args.get('lat', type=float)
     lon  = request.args.get('lon', type=float)
@@ -312,7 +312,7 @@ def api_geocode():
             params={
                 'lat': lat, 'lon': lon,
                 'format': 'json',
-                'zoom': 16,  # High zoom = specific place names
+                'zoom': 18,  # Exact street and building level precision
                 'addressdetails': 1,
             },
             headers={'User-Agent': 'HeatSense-Karnataka/2.0 (academic project)'},
@@ -321,17 +321,24 @@ def api_geocode():
         data = resp.json()
         addr = data.get('address', {})
 
-        # Build specific name (most detailed available)
-        name = (
-            addr.get('neighbourhood') or
-            addr.get('suburb') or
-            addr.get('village') or
-            addr.get('town') or
-            addr.get('city_district') or
-            addr.get('city') or
-            addr.get('county') or
-            data.get('display_name', f"{lat:.4f},{lon:.4f}")
-        )
+        # Extract specific address elements
+        amenity   = addr.get('amenity') or addr.get('building') or addr.get('shop') or addr.get('office') or addr.get('tourism') or addr.get('leisure')
+        road      = addr.get('road') or addr.get('pedestrian') or addr.get('street') or addr.get('residential')
+        locality  = addr.get('neighbourhood') or addr.get('suburb') or addr.get('hamlet') or addr.get('village') or addr.get('town')
+        city      = addr.get('city') or addr.get('city_district') or addr.get('county') or addr.get('state_district')
+        raw_title = data.get('name')
+
+        # Determine the most accurate primary name
+        primary = raw_title or amenity or road or locality or city or f"{lat:.5f}, {lon:.5f}"
+
+        # Build clean contextual name (e.g. "Urva Market, Mangaluru" or "Kuloor Ferry Road, Urva, Mangaluru")
+        parts = [primary]
+        if locality and locality != primary and locality != city:
+            parts.append(locality)
+        if city and city != primary and city not in parts:
+            parts.append(city)
+
+        display_short = ", ".join(parts) if parts else (data.get('display_name') or f"{lat:.5f}, {lon:.5f}")
 
         district = (
             addr.get('county') or
@@ -344,28 +351,66 @@ def api_geocode():
 
         if full == '1':
             return jsonify({
-                'name':         name,
+                'name':         display_short,
+                'primary':      primary,
                 'district':     district,
                 'state':        state,
+                'road':         road or '',
+                'locality':     locality or '',
+                'city':         city or '',
+                'postcode':     addr.get('postcode', ''),
                 'type':         p_type,
                 'level':        level,
-                'display_name': data.get('display_name', ''),
+                'display_name': data.get('display_name', display_short),
                 'lat':          lat,
                 'lon':          lon,
             })
 
-        return jsonify({'display_name': name})
+        return jsonify({'display_name': display_short, 'name': display_short})
 
     except Exception as e:
         print(f"[Geocode] Nominatim failed: {e}")
-        return jsonify({'display_name': f"{lat:.4f}, {lon:.4f}"})
+        return jsonify({'display_name': f"{lat:.5f}, {lon:.5f}", 'name': f"{lat:.5f}, {lon:.5f}"})
+
+
+@main_bp.route('/api/detect-ip-location')
+def api_detect_ip_location():
+    """
+    Fallback location detection via IP lookup when hardware GPS is unavailable or blocked.
+    """
+    try:
+        resp = requests.get('http://ip-api.com/json/', timeout=5)
+        data = resp.json()
+        if data.get('status') == 'success':
+            lat = float(data.get('lat', 12.9716))
+            lon = float(data.get('lon', 77.5946))
+            city = data.get('city', 'Karnataka')
+            region = data.get('regionName', 'Karnataka')
+            return jsonify({
+                'success': True,
+                'lat': lat,
+                'lon': lon,
+                'name': f"{city}, {region}",
+                'accuracy': 5000,
+                'source': 'ip'
+            })
+    except Exception as e:
+        print(f"[IP Location] Detection failed: {e}")
+
+    return jsonify({
+        'success': False,
+        'lat': 12.9716,
+        'lon': 77.5946,
+        'name': 'Bengaluru, Karnataka',
+        'source': 'default'
+    })
 
 
 @main_bp.route('/api/search-location')
 def api_search_location():
     """
     Searches for locations in Karnataka by text using Nominatim.
-    Returns up to 10 matching results with lat/lon.
+    Prioritizes specific place names/landmarks and returns up to 10 matching results.
     """
     q = request.args.get('q', '').strip()
     if len(q) < 2:
@@ -388,17 +433,33 @@ def api_search_location():
         out = []
         for r in results:
             addr = r.get('address', {})
-            # Filter to Karnataka
-            if 'Karnataka' not in r.get('display_name', ''):
-                continue
-            name = (
-                addr.get('neighbourhood') or
-                addr.get('suburb') or
-                addr.get('village') or
-                addr.get('town') or
-                addr.get('city') or
-                r.get('name', r.get('display_name', ''))
+            lat_f = float(r.get('lat', 0))
+            lon_f = float(r.get('lon', 0))
+
+            # Filter to Karnataka: check state name OR coordinates in Karnataka bounding box (11.5–18.6°N, 74.0–78.6°E)
+            is_karnataka = (
+                'Karnataka' in r.get('display_name', '') or
+                addr.get('state') == 'Karnataka' or
+                (11.5 <= lat_f <= 18.6 and 74.0 <= lon_f <= 78.6)
             )
+            if not is_karnataka:
+                continue
+
+            raw_name = r.get('name')
+            amenity  = addr.get('amenity') or addr.get('building') or addr.get('shop') or addr.get('office')
+            road     = addr.get('road') or addr.get('street')
+            locality = addr.get('suburb') or addr.get('neighbourhood') or addr.get('village') or addr.get('town')
+            city     = addr.get('city') or addr.get('county') or addr.get('state_district')
+
+            primary = raw_name or amenity or road or locality or city or r.get('display_name', '')
+            parts = [primary]
+            if locality and locality != primary and locality != city:
+                parts.append(locality)
+            if city and city != primary and city not in parts:
+                parts.append(city)
+
+            name = ", ".join(parts)
+
             out.append({
                 'name':         name,
                 'display_name': r.get('display_name', ''),
@@ -476,9 +537,10 @@ def api_map_layers():
     lat        = request.args.get('lat', 14.5, type=float)
     lon        = request.args.get('lon', 75.7, type=float)
     radius_km  = request.args.get('radius', 15, type=float)
+    mode       = request.args.get('mode', 'full')
 
     from app.visualization import generate_geemap_html
-    html_content = generate_geemap_html(start_date, end_date, lat, lon, radius_km)
+    html_content = generate_geemap_html(start_date, end_date, lat, lon, radius_km, mode=mode)
     return html_content
 
 
@@ -520,6 +582,34 @@ def api_predict():
         'Very High': 'Extreme heat event. Avoid outdoor exposure. Follow district alerts.'
     }
 
+    # ── Integrated Overall Temperature ────────────────────────────────────
+    # The "overall temperature" for the area is the ERA5-Land 2m air temperature,
+    # which is the standard meteorological ambient temperature — the same value
+    # that Google Weather, weather stations, and forecasts report.
+    # LST (Land Surface Temp) is kept separate as it measures ground/rooftop
+    # temperature from satellite, which is typically 5–15°C higher.
+    air_temp_val = features.get('air_temp', 30.0)
+    humidity_val = features.get('relative_humidity', 50.0)
+
+    # Overall temperature = ERA5-Land 2m air temperature (matches Google Weather)
+    overall_temp = round(air_temp_val, 1)
+
+    # Apparent / "Feels Like" temperature
+    if features.get('feels_like') is not None:
+        feels_like = round(features['feels_like'], 1)
+    else:
+        # Heat Index using Rothfusz regression (NWS standard)
+        T = air_temp_val * 9.0 / 5.0 + 32.0  # Convert to Fahrenheit for formula
+        RH = humidity_val
+        if T >= 80.0 and RH >= 40.0:
+            HI = (-42.379 + 2.04901523 * T + 10.14333127 * RH
+                   - 0.22475541 * T * RH - 0.00683783 * T * T
+                   - 0.05481717 * RH * RH + 0.00122874 * T * T * RH
+                   + 0.00085282 * T * RH * RH - 0.00000199 * T * T * RH * RH)
+            feels_like = round((HI - 32.0) * 5.0 / 9.0, 1)  # Back to Celsius
+        else:
+            feels_like = overall_temp
+
     return jsonify({
         'location':             location_name,
         'lat':                  lat,
@@ -530,6 +620,8 @@ def api_predict():
         'current_risk_level':   current_risk,
         'current_advisory':     advisories[current_risk],
         'predicted_lst_celsius': round(features.get('lst', 32.0), 1),
+        'overall_temperature_celsius': overall_temp,
+        'feels_like_celsius':   feels_like,
         # Environmental factors
         'features':             {k: round(v, 3) for k, v in features.items()},
         # Future scenario
@@ -542,6 +634,308 @@ def api_predict():
         'advisory':             advisories[current_risk],
         'uhi_index':            round(current_chi * 4, 2),
     })
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Prophet Time-Series Forecasting API
+# ──────────────────────────────────────────────────────────────────────────────
+
+import threading
+
+_PROPHET_LOCK = threading.Lock()
+_CACHED_HISTORICAL_RECORDS = None
+_CACHED_FORECAST_RECORDS = None
+_CACHED_CSV_MTIME = 0
+
+@main_bp.route('/api/forecast', methods=['GET'])
+def get_prophet_forecast():
+    """
+    Get Prophet forecast and historical observations.
+    Query params:
+      - district_id: integer district ID from database
+      - lat, lon: float latitude and longitude coordinates
+      - name: location name
+      - location: location slug or name (e.g. 'regional', 'bengaluru_urban', 'kalaburagi')
+      - baseline: 'true' (force regional baseline) or 'false'
+      - format: 'json' (default) or 'csv'
+      - include_historical: 'true' (default) or 'false'
+    """
+    global _CACHED_HISTORICAL_RECORDS, _CACHED_FORECAST_RECORDS, _CACHED_CSV_MTIME
+    try:
+        from prophet_forecasting_module.backend.prophet_model import (
+            load_and_preprocess_historical_data,
+            run_prophet_forecast,
+            get_historical_file_for_location,
+            get_prediction_file_for_location,
+            OUTPUT_PREDICTION_FILE
+        )
+        from prophet_forecasting_module.backend.gee_extractor import (
+            extract_district_lst_series,
+            extract_point_lst_series
+        )
+        import pandas as pd
+
+        req_format = request.args.get("format", "json").lower()
+        include_hist = request.args.get("include_historical", "true").lower() == "true"
+        force_baseline = request.args.get("baseline", "false").lower() == "true"
+
+        district_id = request.args.get("district_id", type=int)
+        lat = request.args.get("lat", type=float)
+        lon = request.args.get("lon", type=float)
+        name = request.args.get("name", "").strip()
+        req_location = request.args.get("location", "").strip()
+
+        db = get_db()
+        district = None
+
+        # 1. Resolve district by explicit district_id or numeric location string
+        if district_id:
+            district = db.execute("SELECT * FROM districts WHERE id = ?", (district_id,)).fetchone()
+        elif req_location and req_location.isdigit():
+            district_id = int(req_location)
+            district = db.execute("SELECT * FROM districts WHERE id = ?", (district_id,)).fetchone()
+
+        # 2. Check if req_location or name or (lat, lon) match a district in DB
+        if not district:
+            if req_location and req_location.lower() not in ('regional', 'statewide', 'karnataka'):
+                loc_clean = req_location.replace('_', ' ').strip()
+                district = db.execute("SELECT * FROM districts WHERE LOWER(name) = LOWER(?)", (loc_clean,)).fetchone()
+            if not district and name:
+                district = db.execute("SELECT * FROM districts WHERE LOWER(name) = LOWER(?)", (name,)).fetchone()
+            if not district and lat is not None and lon is not None:
+                # Find nearest district center within ~15km (0.15 degrees)
+                districts = db.execute("SELECT * FROM districts").fetchall()
+                best_d = None
+                best_dist = 0.15
+                for d in districts:
+                    dist_deg = ((d['latitude'] - lat)**2 + (d['longitude'] - lon)**2)**0.5
+                    if dist_deg < best_dist:
+                        best_dist = dist_deg
+                        best_d = d
+                if best_d:
+                    district = best_d
+
+        loc_slug = (req_location or name or '').lower().replace(' ', '_').replace('-', '_')
+        is_regional = force_baseline or loc_slug in ('regional', 'statewide', 'karnataka')
+
+        with _PROPHET_LOCK:
+            target_key = "regional"
+            spatial_unit = "Statewide Regional Baseline"
+            location_label = "Karnataka Statewide (Regional Baseline)"
+            data_scope = "regional_statewide"
+            notice = ""
+            has_local_data = False
+
+            if not is_regional:
+                if district:
+                    district_id = district['id']
+                    target_key = f"district_{district_id}"
+                    hist_file = get_historical_file_for_location(target_key)
+                    if hist_file is None or not hist_file.exists():
+                        try:
+                            print(f"[Prophet API] Triggering GEE historical extraction for District {district['id']} ({district['name']})...")
+                            extract_district_lst_series(
+                                district_id=district['id'],
+                                district_name=district['name'],
+                                lat=district['latitude'],
+                                lon=district['longitude']
+                            )
+                            hist_file = get_historical_file_for_location(target_key)
+                        except Exception as gee_err:
+                            print(f"[Prophet API Warning] GEE district extraction failed for {district['name']}: {gee_err}")
+
+                    if hist_file and hist_file.exists():
+                        has_local_data = True
+                        data_scope = "district_extracted"
+                        spatial_unit = "District GAUL Polygon"
+                        location_label = district['name']
+                    else:
+                        target_key = "regional"
+                        data_scope = "regional_fallback"
+                        spatial_unit = "Statewide Regional Baseline"
+                        location_label = "Karnataka Statewide (Regional Baseline)"
+                        notice = f"Satellite time-series for district '{district['name']}' unavailable. Displaying Karnataka Statewide (Regional Baseline)."
+
+                elif lat is not None and lon is not None:
+                    lat_key = f"{lat:.2f}"
+                    lon_key = f"{lon:.2f}"
+                    target_key = f"point_{lat_key}_{lon_key}"
+                    hist_file = get_historical_file_for_location(target_key)
+                    if hist_file is None or not hist_file.exists():
+                        try:
+                            print(f"[Prophet API] Triggering GEE historical point extraction for ({lat:.4f}, {lon:.4f})...")
+                            extract_point_lst_series(
+                                lat=lat,
+                                lon=lon,
+                                location_name=name or f"{lat:.2f}, {lon:.2f}"
+                            )
+                            hist_file = get_historical_file_for_location(target_key)
+                        except Exception as gee_err:
+                            print(f"[Prophet API Warning] GEE point extraction failed for ({lat}, {lon}): {gee_err}")
+
+                    if hist_file and hist_file.exists():
+                        has_local_data = True
+                        data_scope = "point_extracted"
+                        spatial_unit = "1km MODIS Satellite Pixel Buffer"
+                        location_label = f"{name} (1km MODIS Pixel)" if name else f"Point ({lat:.2f}, {lon:.2f})"
+                    else:
+                        target_key = "regional"
+                        data_scope = "regional_fallback"
+                        spatial_unit = "Statewide Regional Baseline"
+                        location_label = "Karnataka Statewide (Regional Baseline)"
+                        notice = f"Satellite time-series for point ({lat:.4f}, {lon:.4f}) unavailable. Displaying Karnataka Statewide (Regional Baseline)."
+
+                elif loc_slug:
+                    target_key = loc_slug
+                    hist_file = get_historical_file_for_location(target_key)
+                    if hist_file and hist_file.exists():
+                        has_local_data = True
+                        data_scope = "local_extracted"
+                        spatial_unit = "Extracted Local Area"
+                        location_label = req_location.replace('_', ' ').title()
+                    else:
+                        target_key = "regional"
+                        data_scope = "regional_fallback"
+                        spatial_unit = "Statewide Regional Baseline"
+                        location_label = "Karnataka Statewide (Regional Baseline)"
+                        notice = f"Local dataset for '{req_location}' unavailable. Displaying Karnataka Statewide (Regional Baseline)."
+
+            target_hist_file = get_historical_file_for_location(target_key)
+            target_pred_file = get_prediction_file_for_location(target_key)
+
+            # Run prophet if output prediction file doesn't exist for the target historical dataset
+            if target_pred_file is None or not target_pred_file.exists():
+                print(f"[Prophet] Prediction file missing for '{target_key}'. Fitting Prophet model...")
+                df_hist_target = load_and_preprocess_historical_data(location_key=target_key)
+                run_prophet_forecast(df_hist_target, location_key=target_key)
+
+            # Read prediction CSV
+            df_pred = pd.read_csv(target_pred_file)
+
+            # If CSV format requested
+            if req_format == "csv":
+                csv_str = df_pred.to_csv(index=False)
+                return Response(csv_str, mimetype="text/csv", headers={"Content-Disposition": f"attachment;filename=prediction_{target_key}.csv"})
+
+            forecast_records = []
+            for _, row in df_pred.iterrows():
+                record = {
+                    "ds": str(row["ds"]),
+                    "yhat": round(float(row["yhat"]), 2)
+                }
+                if "yhat_lower" in row and pd.notnull(row["yhat_lower"]):
+                    record["yhat_lower"] = round(float(row["yhat_lower"]), 2)
+                if "yhat_upper" in row and pd.notnull(row["yhat_upper"]):
+                    record["yhat_upper"] = round(float(row["yhat_upper"]), 2)
+                forecast_records.append(record)
+
+            historical_records = []
+            if include_hist:
+                try:
+                    df_hist = load_and_preprocess_historical_data(location_key=target_key)
+                    historical_records = [
+                        {"ds": row["ds"].strftime("%Y-%m-%d"), "temp": round(float(row["y"]), 2)}
+                        for _, row in df_hist.iterrows()
+                    ]
+                except Exception as e:
+                    print(f"[Prophet Warning] Failed to load historical series for {target_key}: {e}")
+
+        return jsonify({
+            "status": "success",
+            "district_id": district_id,
+            "lat": lat,
+            "lon": lon,
+            "requested_location": req_location or name or "Statewide",
+            "location_label": location_label,
+            "spatial_unit": spatial_unit,
+            "data_scope": data_scope,
+            "has_local_data": has_local_data if not is_regional else True,
+            "notice": notice,
+            "historical_count": len(historical_records),
+            "forecast_count": len(forecast_records),
+            "historical": historical_records,
+            "forecast": forecast_records
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"[Prophet API Error] /api/forecast failed: {e}")
+        return jsonify({"status": "error", "message": f"Forecast service error: {str(e)}"}), 500
+
+
+@main_bp.route('/api/forecast/generate', methods=['POST'])
+def generate_prophet_forecast_endpoint():
+    """Re-run the Prophet model training & prediction pipeline on demand for a location."""
+    global _CACHED_HISTORICAL_RECORDS, _CACHED_FORECAST_RECORDS, _CACHED_CSV_MTIME
+    try:
+        from prophet_forecasting_module.backend.prophet_model import (
+            load_and_preprocess_historical_data,
+            run_prophet_forecast,
+            get_historical_file_for_location
+        )
+        req_location = request.args.get("location", "regional").strip()
+        loc_slug = req_location.lower().replace(' ', '_').replace('-', '_')
+
+        hist_file = get_historical_file_for_location(loc_slug)
+        if loc_slug not in ('regional', 'statewide', 'karnataka', '') and (hist_file is None or not hist_file.exists()):
+            return jsonify({
+                "status": "error",
+                "message": f"Cannot generate local forecast for '{req_location}': No authentic GEE historical observation dataset found. Run GEE extraction first."
+            }), 400
+
+        with _PROPHET_LOCK:
+            periods = int(request.args.get("periods", 3650))
+            df_hist = load_and_preprocess_historical_data(location_key=loc_slug)
+            forecast_future, _ = run_prophet_forecast(df_hist, periods=periods, location_key=loc_slug)
+            _CACHED_FORECAST_RECORDS = None
+            _CACHED_CSV_MTIME = 0
+
+        return jsonify({
+            "status": "success",
+            "location": loc_slug,
+            "message": f"Successfully generated {len(forecast_future)} prediction steps for '{req_location}' with Meta Prophet.",
+            "forecast_count": len(forecast_future),
+            "start_date": str(forecast_future["ds"].min()),
+            "end_date": str(forecast_future["ds"].max())
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"[Prophet API Error] /api/forecast/generate failed: {e}")
+        return jsonify({"status": "error", "message": f"Forecast generation failed: {str(e)}"}), 500
+
+
+
+@main_bp.route('/api/forecast/health', methods=['GET'])
+@main_bp.route('/api/health', methods=['GET'])
+def prophet_health_check():
+    """Prophet forecasting system health check endpoint."""
+    try:
+        from prophet_forecasting_module.backend.prophet_model import (
+            INPUT_TS_FILE,
+            FALLBACK_TS_FILE,
+            OUTPUT_PREDICTION_FILE
+        )
+        input_file = INPUT_TS_FILE if INPUT_TS_FILE.exists() else FALLBACK_TS_FILE
+        return jsonify({
+            "status": "healthy",
+            "service": "Prophet Forecasting Engine",
+            "input_dataset_exists": input_file.exists(),
+            "input_dataset_path": str(input_file.name),
+            "output_prediction_exists": OUTPUT_PREDICTION_FILE.exists(),
+            "output_prediction_path": str(OUTPUT_PREDICTION_FILE.name)
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@main_bp.route('/api/prediction-timeline')
+def api_prediction_timeline():
+    """Adapter endpoint providing legacy timeline callers access to Prophet forecast data."""
+    return get_prophet_forecast()
 
 
 @main_bp.route('/api/history')
@@ -606,10 +1000,11 @@ def api_factor_analysis():
     # Radar chart from actual feature values
     radar_json = generate_radar_chart(features, location_name=location_name)
 
-    # Bar/pie/table from RF model feature importances
+    # Bar/pie/table from RF model feature importances × actual location values
     try:
-        ml_analysis = get_feature_analysis()
+        ml_analysis = get_feature_analysis(location_features=features)
     except Exception as e:
+        print(f"[FactorAnalysis] get_feature_analysis error: {e}")
         ml_analysis = {'ranked_factors': [], 'bar_chart_json': '{}', 'pie_chart_json': '{}', 'table_chart_json': '{}'}
 
     # Build factor scores for display

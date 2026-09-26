@@ -6,7 +6,7 @@ app = create_app()
 
 if __name__ == '__main__':
     # Retrieve configuration from environment or use default development values
-    host = os.environ.get('FLASK_RUN_HOST', '127.0.0.1')
+    host = os.environ.get('FLASK_RUN_HOST', '0.0.0.0')
     port = int(os.environ.get('FLASK_RUN_PORT', 5000))
     debug = os.environ.get('FLASK_DEBUG', 'True').lower() in ('true', '1', 't')
 
