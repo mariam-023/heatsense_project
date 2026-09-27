@@ -175,6 +175,7 @@ def alerts():
         district_risk_cards=district_risk_cards,
         tier_counts=tier_counts,
         risk_tiers=RISK_TIERS,
+        districts=[dict(d) for d in districts],
     )
 
 @main_bp.route('/logout')
@@ -1305,3 +1306,249 @@ def api_download_pdf():
         future_chi=future_chi,
         future_risk=future_risk,
     )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# SMS Heat Alerts API (Firebase Admin & Firestore Integration)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _get_firestore_db():
+    """
+    Safely retrieves the Firestore client instance using Firebase Admin SDK.
+    Returns (db_client, error_message).
+    """
+    try:
+        import firebase_admin
+        from firebase_admin import firestore
+        if not firebase_admin._apps:
+            return None, "Firebase Admin SDK is not initialized. Ensure GOOGLE_APPLICATION_CREDENTIALS or Firebase project is configured."
+        db = firestore.client()
+        return db, None
+    except Exception as e:
+        return None, f"Firestore connection unavailable: {str(e)}"
+
+def _mask_phone_number(phone_str):
+    """Formats phone number safely for UI display and logging (e.g. +91 ******5678)."""
+    clean = re.sub(r'[^\d+]', '', phone_str or '')
+    if len(clean) >= 10:
+        prefix = clean[:3] if clean.startswith('+') else clean[:2]
+        suffix = clean[-4:]
+        masked_len = max(4, len(clean) - len(prefix) - len(suffix))
+        return f"{prefix} {'*' * masked_len}{suffix}"
+    return "*******"
+
+@main_bp.route('/api/alerts/sms-status', methods=['GET'])
+def api_alerts_sms_status():
+    """
+    Returns the current SMS Heat Alert subscription status for the logged-in user.
+    Session authentication is strictly enforced.
+    """
+    user = session.get('user')
+    if not user or not user.get('id'):
+        return jsonify({
+            'success': False,
+            'authenticated': False,
+            'subscribed': False,
+            'message': 'Please sign in to view your SMS alert subscription.'
+        }), 401
+
+    user_id = str(user['id'])
+    db, err = _get_firestore_db()
+    if err or db is None:
+        return jsonify({
+            'success': False,
+            'authenticated': True,
+            'subscribed': False,
+            'firestore_configured': False,
+            'message': f"SMS alert service is currently unconfigured ({err})."
+        }), 200
+
+    try:
+        doc_ref = db.collection('sms_subscriptions').document(user_id)
+        doc = doc_ref.get()
+        if not doc.exists:
+            return jsonify({
+                'success': True,
+                'authenticated': True,
+                'subscribed': False,
+                'firestore_configured': True,
+                'message': 'No active SMS heat alert subscription found.'
+            }), 200
+
+        data = doc.to_dict() or {}
+        is_active = data.get('status') == 'active' and data.get('opt_in_consent') is True
+
+        return jsonify({
+            'success': True,
+            'authenticated': True,
+            'subscribed': is_active,
+            'firestore_configured': True,
+            'district_id': data.get('district_id'),
+            'district_name': data.get('district_name'),
+            'phone_masked': data.get('phone_masked', _mask_phone_number(data.get('phone_e164', ''))),
+            'consent_statement': data.get('consent_statement'),
+            'subscribed_at': str(data.get('subscribed_at', '')),
+            'message': 'Subscription status loaded successfully.'
+        }), 200
+
+    except Exception as e:
+        print(f"[SMS Status Error] {e}")
+        return jsonify({
+            'success': False,
+            'authenticated': True,
+            'subscribed': False,
+            'firestore_configured': False,
+            'message': f'Could not retrieve subscription status: {str(e)}'
+        }), 500
+
+
+@main_bp.route('/api/alerts/sms-subscribe', methods=['POST'])
+def api_alerts_sms_subscribe():
+    """
+    Subscribes the logged-in user to SMS Heat Alerts.
+    Enforces Flask session validation, input sanitization, district existence check,
+    and explicit opt-in consent recording in Firestore.
+    """
+    user = session.get('user')
+    if not user or not user.get('id'):
+        return jsonify({
+            'success': False,
+            'message': 'Please sign in to subscribe to SMS heat alerts.'
+        }), 401
+
+    body = request.get_json() or {}
+    phone_raw = (body.get('phone_number') or '').strip()
+    district_id = body.get('district_id')
+    opt_in_consent = body.get('opt_in_consent') is True
+
+    # 1. Validate Consent Checkbox
+    if not opt_in_consent:
+        return jsonify({
+            'success': False,
+            'message': 'Explicit consent is required to opt in to SMS heat alerts.'
+        }), 400
+
+    # 2. Validate Phone Format
+    clean_phone = re.sub(r'[^\d+]', '', phone_raw)
+    if not clean_phone.startswith('+'):
+        clean_phone = '+91' + clean_phone.lstrip('0')
+
+    digits_only = re.sub(r'\D', '', clean_phone)
+    if len(digits_only) < 10 or len(digits_only) > 15:
+        return jsonify({
+            'success': False,
+            'message': 'Please enter a valid mobile number with country code (e.g. +91 98765 43210).'
+        }), 400
+
+    # 3. Validate District in SQLite database
+    if not district_id:
+        return jsonify({
+            'success': False,
+            'message': 'Please select a valid district for SMS alerts.'
+        }), 400
+
+    db_sqlite = get_db()
+    district_row = db_sqlite.execute('SELECT id, name FROM districts WHERE id = ?', (district_id,)).fetchone()
+    if not district_row:
+        return jsonify({
+            'success': False,
+            'message': 'The selected district was not found in the Karnataka district database.'
+        }), 400
+
+    district_name = district_row['name']
+    user_id = str(user['id'])
+    masked_phone = _mask_phone_number(clean_phone)
+
+    # 4. Check Firestore client connection
+    firestore_db, err = _get_firestore_db()
+    if err or firestore_db is None:
+        print(f"[SMS Subscribe Error] Firestore unavailable: {err}")
+        return jsonify({
+            'success': False,
+            'message': f'Subscription failed: Firestore service is unavailable on the server. ({err})'
+        }), 503
+
+    # 5. Persist evidence of consent in Firestore via Admin SDK
+    try:
+        from firebase_admin import firestore
+        consent_statement = "I explicitly opt in to receive HeatSense SMS heat alerts for my selected district."
+        doc_data = {
+            'user_id': user['id'],
+            'user_email': user.get('email', ''),
+            'district_id': district_row['id'],
+            'district_name': district_name,
+            'phone_e164': clean_phone,
+            'phone_masked': masked_phone,
+            'opt_in_consent': True,
+            'consent_statement': consent_statement,
+            'consent_version': '1.0-2026',
+            'status': 'active',
+            'subscribed_at': firestore.SERVER_TIMESTAMP,
+            'updated_at': firestore.SERVER_TIMESTAMP,
+            'unsubscribed_at': None
+        }
+
+        firestore_db.collection('sms_subscriptions').document(user_id).set(doc_data, merge=True)
+        print(f"[SMS Subscription] Saved active subscription for user {user_id} ({district_name}, {masked_phone})")
+
+        return jsonify({
+            'success': True,
+            'subscribed': True,
+            'district_name': district_name,
+            'district_id': district_row['id'],
+            'phone_masked': masked_phone,
+            'message': f'Successfully subscribed to SMS Heat Alerts for {district_name} ({masked_phone})!'
+        }), 200
+
+    except Exception as e:
+        print(f"[SMS Subscribe Exception] {e}")
+        return jsonify({
+            'success': False,
+            'message': f'Failed to save subscription to database: {str(e)}'
+        }), 500
+
+
+@main_bp.route('/api/alerts/sms-unsubscribe', methods=['POST'])
+def api_alerts_sms_unsubscribe():
+    """
+    Unsubscribes the logged-in user from SMS Heat Alerts.
+    Updates status to 'unsubscribed' and sets opt_in_consent to False.
+    """
+    user = session.get('user')
+    if not user or not user.get('id'):
+        return jsonify({
+            'success': False,
+            'message': 'Please sign in to manage your subscription.'
+        }), 401
+
+    user_id = str(user['id'])
+    firestore_db, err = _get_firestore_db()
+    if err or firestore_db is None:
+        return jsonify({
+            'success': False,
+            'message': f'Unsubscribe failed: Firestore service is unavailable ({err}).'
+        }), 503
+
+    try:
+        from firebase_admin import firestore
+        doc_ref = firestore_db.collection('sms_subscriptions').document(user_id)
+        doc_ref.set({
+            'status': 'unsubscribed',
+            'opt_in_consent': False,
+            'unsubscribed_at': firestore.SERVER_TIMESTAMP,
+            'updated_at': firestore.SERVER_TIMESTAMP
+        }, merge=True)
+
+        print(f"[SMS Unsubscribe] User {user_id} unsubscribed successfully.")
+        return jsonify({
+            'success': True,
+            'subscribed': False,
+            'message': 'You have been unsubscribed from HeatSense SMS Heat Alerts.'
+        }), 200
+
+    except Exception as e:
+        print(f"[SMS Unsubscribe Exception] {e}")
+        return jsonify({
+            'success': False,
+            'message': f'Could not complete unsubscribe request: {str(e)}'
+        }), 500

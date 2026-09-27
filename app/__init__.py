@@ -58,6 +58,37 @@ def create_app(test_config=None):
     except Exception as e:
         print(f"[Startup] GEE initialization deferred: {e}")
 
+    # Initialize Firebase Admin SDK
+    _init_firebase_admin(app)
+
+    return app
+
+def _init_firebase_admin(app):
+    """
+    Initializes Firebase Admin SDK using Application Default Credentials (ADC)
+    or a service account JSON file.
+    """
+    try:
+        import firebase_admin
+        from firebase_admin import credentials
+        if not firebase_admin._apps:
+            project_id = app.config.get('FIREBASE_PROJECT_ID') or os.environ.get('FIREBASE_PROJECT_ID', 'heatsense-60733')
+            cred_path = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
+            if cred_path and os.path.exists(cred_path):
+                cred = credentials.Certificate(cred_path)
+                firebase_admin.initialize_app(cred, {'projectId': project_id})
+                print(f"[Firebase Admin] Initialized with Service Account key: {cred_path}")
+            else:
+                try:
+                    cred = credentials.ApplicationDefault()
+                    firebase_admin.initialize_app(cred, {'projectId': project_id})
+                    print("[Firebase Admin] Initialized with Application Default Credentials (ADC).")
+                except Exception as adc_err:
+                    firebase_admin.initialize_app(options={'projectId': project_id})
+                    print(f"[Firebase Admin] Initialized with project_id option: {project_id} (ADC deferred: {adc_err})")
+    except Exception as e:
+        print(f"[Firebase Admin] Initialization info: {e}")
+
     # Auto-train Random Forest model on first startup
     from app.ml import MODEL_PATH, train_rf_model
     if not os.path.exists(MODEL_PATH):

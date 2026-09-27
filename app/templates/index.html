@@ -592,6 +592,230 @@
 <div id="page-alerts-precautions" class="dashboard-page">
     <div class="section-header"><span class="section-icon">🔔</span><h4>Age-Specific Precautions & Alerts</h4></div>
 
+    <!-- ── SMS Heat Alerts Subscription Section ──────────────────────────────── -->
+    <div class="card border-0 shadow-sm mb-4"
+         style="background: linear-gradient(135deg, rgba(26,26,46,0.95) 0%, rgba(22,33,62,0.95) 100%);
+                border: 1px solid rgba(249,115,22,0.4) !important;">
+        <div class="card-header py-3 d-flex justify-content-between align-items-center"
+             style="background: rgba(249,115,22,0.12); border-bottom: 1px solid rgba(249,115,22,0.25);">
+            <div class="d-flex align-items-center gap-2">
+                <span class="fs-4">📱</span>
+                <div>
+                    <h5 class="card-title mb-0 fw-bold text-white">SMS Heat Alerts</h5>
+                    <small style="color: #cbd5e1;">Opt-in to receive mobile phone advisories when your district reaches high heat stress levels</small>
+                </div>
+            </div>
+            <span id="sms-status-badge-idx" class="badge bg-secondary">Checking status…</span>
+        </div>
+        <div class="card-body p-4">
+
+            <!-- Alert message banner -->
+            <div id="sms-alert-msg-idx" class="alert d-none py-2 px-3 mb-3 small" role="alert"></div>
+
+            {% if not session.get('user') %}
+            <!-- Unauthenticated State -->
+            <div class="text-center py-3">
+                <div class="mb-2 fs-3">🔒</div>
+                <h6 class="fw-bold text-white mb-1">Sign In Required</h6>
+                <p class="small text-white-50 mb-3">Please sign in to your HeatSense account to configure district SMS heat alerts.</p>
+                <a href="{{ url_for('main.login') }}" class="btn btn-warning btn-sm fw-bold px-4">
+                    <i class="fa-solid fa-right-to-bracket me-1"></i> Sign In to Enable SMS Alerts
+                </a>
+            </div>
+            {% else %}
+            <!-- Authenticated State -->
+
+            <!-- Form View (Unsubscribed) -->
+            <div id="sms-form-view-idx" class="d-none">
+                <form id="sms-subscribe-form-idx" onsubmit="handleSmsSubscribeIdx(event)">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="sms-district-select-idx" class="form-label small fw-semibold text-white mb-1">
+                                📍 Select Alert District
+                            </label>
+                            <select id="sms-district-select-idx" class="form-select bg-dark text-white border-secondary small" required>
+                                <option value="" disabled selected>-- Select a Karnataka District --</option>
+                                {% for d in districts %}
+                                <option value="{{ d.id }}">{{ d.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="sms-phone-input-idx" class="form-label small fw-semibold text-white mb-1">
+                                📞 Mobile Phone Number
+                            </label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-secondary text-white border-secondary small">+91</span>
+                                <input type="tel" id="sms-phone-input-idx" class="form-control bg-dark text-white border-secondary small"
+                                       placeholder="9876543210" pattern="[0-9]{10}"
+                                       value="{{ (session.user.phone_number or '')|replace('+91', '')|replace(' ', '') }}" required>
+                            </div>
+                            <div class="form-text small" style="font-size: 0.72rem; color: #94a3b8;">
+                                Standard 10-digit Indian mobile number. Number is masked in logs and UI.
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Explicit Opt-in Checkbox -->
+                    <div class="form-check mt-3">
+                        <input class="form-check-input" type="checkbox" id="sms-consent-check-idx" onchange="toggleSmsSubmitBtnIdx()">
+                        <label class="form-check-label small text-white-50" for="sms-consent-check-idx" style="font-size: 0.8rem; line-height: 1.4;">
+                            I explicitly agree to receive automated HeatSense heat wave and extreme temperature SMS alerts for my selected district.
+                            Message frequency depends on heat risk severity. I can unsubscribe at any time.
+                        </label>
+                    </div>
+
+                    <div class="d-flex align-items-center justify-content-between mt-3 pt-2 border-top border-secondary">
+                        <span class="small text-white-50" style="font-size: 0.75rem;">
+                            ℹ️ SMS delivery pipeline will be connected in future release. No charge applies.
+                        </span>
+                        <button type="submit" id="sms-submit-btn-idx" class="btn btn-warning btn-sm fw-bold px-4" disabled>
+                            <i class="fa-solid fa-bell me-1"></i> Subscribe to SMS Alerts
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Active Subscription View -->
+            <div id="sms-active-view-idx" class="d-none">
+                <div class="p-3 rounded-3" style="background: rgba(39,174,96,0.12); border: 1px solid rgba(39,174,96,0.3);">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="fw-bold text-success mb-1">
+                                🟢 Active SMS Heat Alert Subscription
+                            </div>
+                            <div class="small text-white mb-1">
+                                📍 <strong>District:</strong> <span id="sms-active-district-idx" class="text-warning"></span>
+                            </div>
+                            <div class="small text-white mb-1">
+                                📞 <strong>Phone:</strong> <span id="sms-active-phone-idx" class="font-monospace text-info"></span>
+                            </div>
+                            <div class="small text-white-50" style="font-size: 0.75rem;">
+                                📜 Consent recorded on <span id="sms-active-date-idx"></span>
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-outline-danger btn-sm" onclick="handleSmsUnsubscribeIdx()">
+                            <i class="fa-solid fa-bell-slash me-1"></i> Unsubscribe
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {% endif %}
+
+        </div>
+    </div>
+
+    <script>
+    function loadSmsStatusIdx() {
+        fetch('/api/alerts/sms-status')
+            .then(r => r.json())
+            .then(data => {
+                const badge = document.getElementById('sms-status-badge-idx');
+                const formView = document.getElementById('sms-form-view-idx');
+                const activeView = document.getElementById('sms-active-view-idx');
+                if (!badge) return;
+
+                if (!data.success || !data.firestore_configured) {
+                    badge.className = 'badge bg-warning text-dark';
+                    badge.textContent = 'Service Unconfigured';
+                    if (formView) formView.classList.remove('d-none');
+                    showSmsMessageIdx(data.message || 'SMS alert service is currently unconfigured.', false);
+                    return;
+                }
+
+                if (data.subscribed) {
+                    badge.className = 'badge bg-success';
+                    badge.textContent = 'Active Subscription';
+                    if (formView) formView.classList.add('d-none');
+                    if (activeView) activeView.classList.remove('d-none');
+
+                    document.getElementById('sms-active-district-idx').textContent = data.district_name || 'Selected District';
+                    document.getElementById('sms-active-phone-idx').textContent = data.phone_masked || '';
+                    document.getElementById('sms-active-date-idx').textContent = data.subscribed_at ? data.subscribed_at.substring(0, 19) : 'Recently';
+                } else {
+                    badge.className = 'badge bg-secondary';
+                    badge.textContent = 'Not Subscribed';
+                    if (activeView) activeView.classList.add('d-none');
+                    if (formView) formView.classList.remove('d-none');
+                }
+            })
+            .catch(err => {
+                const badge = document.getElementById('sms-status-badge-idx');
+                if (badge) {
+                    badge.className = 'badge bg-danger';
+                    badge.textContent = 'Status Error';
+                }
+            });
+    }
+
+    function toggleSmsSubmitBtnIdx() {
+        const check = document.getElementById('sms-consent-check-idx');
+        const btn = document.getElementById('sms-submit-btn-idx');
+        if (btn) btn.disabled = !check.checked;
+    }
+
+    function showSmsMessageIdx(msg, isSuccess) {
+        const box = document.getElementById('sms-alert-msg-idx');
+        if (!box) return;
+        box.className = `alert py-2 px-3 mb-3 small alert-${isSuccess ? 'success' : 'danger'}`;
+        box.textContent = msg;
+        box.classList.remove('d-none');
+    }
+
+    function handleSmsSubscribeIdx(e) {
+        e.preventDefault();
+        const districtId = parseInt(document.getElementById('sms-district-select-idx').value, 10);
+        const rawPhone = document.getElementById('sms-phone-input-idx').value.trim();
+        const consent = document.getElementById('sms-consent-check-idx').checked;
+        const submitBtn = document.getElementById('sms-submit-btn-idx');
+
+        if (!districtId || !consent) return;
+
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i> Subscribing…';
+
+        fetch('/api/alerts/sms-subscribe', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                phone_number: rawPhone,
+                district_id: districtId,
+                opt_in_consent: consent
+            })
+        })
+        .then(r => r.json())
+        .then(data => {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="fa-solid fa-bell me-1"></i> Subscribe to SMS Alerts';
+            showSmsMessageIdx(data.message, data.success);
+            if (data.success) loadSmsStatusIdx();
+        })
+        .catch(err => {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="fa-solid fa-bell me-1"></i> Subscribe to SMS Alerts';
+            showSmsMessageIdx('Request failed: ' + err.message, false);
+        });
+    }
+
+    function handleSmsUnsubscribeIdx() {
+        if (!confirm('Are you sure you want to unsubscribe from SMS heat alerts?')) return;
+
+        fetch('/api/alerts/sms-unsubscribe', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+        .then(r => r.json())
+        .then(data => {
+            showSmsMessageIdx(data.message, data.success);
+            if (data.success) loadSmsStatusIdx();
+        })
+        .catch(err => {
+            showSmsMessageIdx('Unsubscribe failed: ' + err.message, false);
+        });
+    }
+    </script>
+
     <div class="row g-3 mb-4" id="age-cards-container">
         <div class="loading-overlay"><div class="hs-spinner"></div><span>Loading precautions...</span></div>
     </div>
@@ -604,6 +828,7 @@
         </div>
     </div>
 </div>
+
 
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
 <!-- PAGE 10: REPORTS                                                        -->

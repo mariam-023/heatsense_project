@@ -62,7 +62,10 @@
             }
         }
         if (page === 'health-risk') loadHealthRisk();
-        if (page === 'alerts-precautions') loadAlertsPrecautions();
+        if (page === 'alerts-precautions') {
+            loadAlertsPrecautions();
+            if (typeof loadSmsStatusIdx === 'function') loadSmsStatusIdx();
+        }
     }
 
     // ── API Helper ────────────────────────────────────────────────────────
